@@ -128,6 +128,21 @@ h3{font-size:var(--text-base);font-weight:600;letter-spacing:0}
 .topbar .tt{flex:1;min-width:160px}
 .topbar .tt h1{font-size:var(--text-lg);font-weight:600}
 .topbar .tt p{font-size:13px;color:var(--muted);margin-top:2px}
+.db-status{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:var(--radius-pill);
+  font-size:12px;font-family:var(--font-mono);border:1px solid var(--border);background:var(--surface);
+  color:var(--muted);white-space:nowrap;cursor:pointer;transition:border-color var(--motion-fast),color var(--motion-fast)}
+.db-status[hidden]{display:none}
+.db-status .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+.db-status.online,.db-status.saved{border-color:color-mix(in oklab,var(--success),transparent 62%);color:var(--success)}
+.db-status.online .dot,.db-status.saved .dot{background:var(--success)}
+.db-status.saving{border-color:color-mix(in oklab,var(--accent),transparent 62%);color:var(--accent)}
+.db-status.saving .dot{background:var(--accent);animation:pulse 1s ease-in-out infinite}
+.db-status.error,.db-status.unauthorized{border-color:color-mix(in oklab,var(--danger),transparent 62%);color:var(--danger)}
+.db-status.error .dot,.db-status.unauthorized .dot{background:var(--danger)}
+.db-status.offline{border-color:color-mix(in oklab,var(--warn),transparent 55%);color:color-mix(in oklab,var(--warn),black 26%)}
+.db-status.offline .dot{background:var(--warn)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@media (max-width:640px){ .db-status{font-size:11px;padding:5px 10px} }
 .content{padding:clamp(18px,2.4vw,32px);flex:1}
 .view{display:none;animation:fade var(--motion-base) var(--ease-standard)}
 .view.active{display:block}
@@ -192,6 +207,12 @@ h3{font-size:var(--text-base);font-weight:600;letter-spacing:0}
   transition:height var(--motion-base) var(--ease-standard)}
 .col-bar.danger{background:var(--danger)}
 .col-bar.warn{background:var(--warn)}
+.col-bar.success{background:var(--success)}
+
+/* ─── card de salário ──────────────────────────────────────────────────── */
+.salario{display:grid;grid-template-columns:1.5fr 1fr;gap:20px;align-items:center;margin-bottom:20px}
+.salario-form{display:flex;gap:10px;align-items:flex-end}
+@media (max-width:760px){ .salario{grid-template-columns:1fr;gap:14px} .salario-form{flex-direction:column;align-items:stretch} }
 .col-lbl{font-size:11px;color:var(--muted);font-family:var(--font-mono) ;white-space:nowrap}
 .col-val{font-size:10px;color:var(--muted);font-family:var(--font-mono);white-space:nowrap}
 
@@ -267,13 +288,15 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
   transition:all var(--motion-base) var(--ease-standard);z-index:60;box-shadow:var(--elev-raised)}
 #toast.show{opacity:1;transform:translate(-50%,0)}
 
-/* ─── gate de acesso ───────────────────────────────────────────────────── */
-#gate{position:fixed;inset:0;z-index:70;display:grid;place-items:center;padding:20px;
+/* ─── tela de login / primeiro acesso ──────────────────────────────────── */
+#auth{position:fixed;inset:0;z-index:70;display:grid;place-items:center;padding:20px;
   background:color-mix(in oklab,var(--fg),transparent 45%)}
-#gate[hidden]{display:none}
+#auth[hidden]{display:none}
 .gate-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
-  padding:28px;width:min(380px,100%);box-shadow:var(--elev-raised)}
+  padding:28px;width:min(400px,100%);box-shadow:var(--elev-raised)}
 .gate-card .field{margin-bottom:14px}
+.auth-err{color:var(--danger);font-size:13px;margin:0 0 12px}
+.auth-err[hidden]{display:none}
 
 /* ─── widget iOS ───────────────────────────────────────────────────────── */
 .phone{width:280px;margin:0 auto;border-radius:38px;border:9px solid var(--fg);background:var(--bg);
@@ -344,6 +367,7 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
         <h1 id="page-title">Visão geral</h1>
         <p id="page-sub">Referência: outubro de 2026</p>
       </div>
+      <div class="db-status" id="db-status" hidden></div>
       <div class="topbar-actions" id="topbar-actions"></div>
     </header>
     <main class="content" id="content"></main>
@@ -368,18 +392,32 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
 
 <div id="toast" role="status" aria-live="polite"></div>
 
-<div id="gate" hidden>
-  <form id="gate-form" class="gate-card">
+<div id="auth" hidden>
+  <div class="gate-card">
     <div class="brand" style="margin-bottom:18px">
       <div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 3 8-9"/><path d="M21 6v5h-5"/></svg></div>
       <div><div class="brand-name">Fluxo</div><div class="brand-sub">controle financeiro</div></div>
     </div>
-    <h2 style="font-size:var(--text-lg)">Acesso ao seu painel</h2>
-    <p class="muted" style="font-size:13px;margin:8px 0 16px">Digite a chave de acesso para carregar os dados salvos no banco.</p>
-    <label class="field"><span>Chave de acesso</span><input id="gate-input" class="input" type="password" placeholder="Sua chave secreta" autocomplete="current-password" /></label>
-    <p id="gate-err" class="muted" style="display:none;color:var(--danger);font-size:13px;margin:0 0 12px">Chave incorreta. Tente novamente.</p>
-    <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center">Entrar</button>
-  </form>
+
+    <form id="login-form" hidden>
+      <h2 style="font-size:var(--text-lg)">Entrar</h2>
+      <p class="muted" style="font-size:13px;margin:8px 0 16px">Acesso restrito. Informe usuário e senha.</p>
+      <label class="field"><span>Usuário</span><input id="login-user" class="input" type="text" autocomplete="username" placeholder="seu usuário" /></label>
+      <label class="field"><span>Senha</span><input id="login-pass" class="input" type="password" autocomplete="current-password" placeholder="sua senha" /></label>
+      <p id="login-err" class="auth-err" hidden></p>
+      <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center">Entrar</button>
+    </form>
+
+    <form id="setup-form" hidden>
+      <h2 style="font-size:var(--text-lg)">Primeiro acesso</h2>
+      <p class="muted" style="font-size:13px;margin:8px 0 16px">Crie o usuário que vai acessar o app. Isso só pode ser feito uma vez.</p>
+      <label class="field"><span>Usuário</span><input id="setup-user" class="input" type="text" autocomplete="username" placeholder="ex.: aline" /></label>
+      <label class="field"><span>Senha</span><input id="setup-pass" class="input" type="password" autocomplete="new-password" placeholder="mínimo 6 caracteres" /></label>
+      <label class="field"><span>Confirmar senha</span><input id="setup-pass2" class="input" type="password" autocomplete="new-password" /></label>
+      <p id="setup-err" class="auth-err" hidden></p>
+      <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center">Criar usuário e entrar</button>
+    </form>
+  </div>
 </div>
 
 <script>
@@ -387,9 +425,11 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
   "use strict";
   var STORE = "fluxo:financas:v2";
   var API = "/api/state";
+  var AUTH = { login:"/api/login", logout:"/api/logout", me:"/api/me", setup:"/api/setup" };
   var TOKEN = "";
   try{ TOKEN = localStorage.getItem("fluxo:token") || ""; }catch(e){}
   var serverMode = false;
+  var currentUser = null;
   var saveTimer = null;
   var BRL = function(n){ return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(Number(n)||0); };
   var NUM = function(n){ return new Intl.NumberFormat("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(n)||0); };
@@ -438,8 +478,11 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
   function save(){
     try{ localStorage.setItem(STORE, JSON.stringify(db)); }catch(e){}
     if(serverMode){
+      setStatus("saving");
       clearTimeout(saveTimer);
-      saveTimer = setTimeout(function(){ serverPut(db); }, 500);
+      saveTimer = setTimeout(function(){
+        serverPut(db).then(function(ok){ setStatus(ok ? "saved" : "error", nowHM()); });
+      }, 500);
     }
   }
   function authHeaders(extra){
@@ -458,30 +501,104 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
     return fetch(API, { method:"POST", headers: authHeaders({ "Content-Type":"application/json" }), body: JSON.stringify({ data:data }) })
       .then(function(r){ return r.ok; }).catch(function(){ return false; });
   }
+  function nowHM(){
+    try{ return new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}); }catch(e){ return ""; }
+  }
+  function setStatus(state, time){
+    var el = document.getElementById("db-status");
+    if(!el) return;
+    var txt;
+    if(state==="connecting") txt = "Conectando ao banco…";
+    else if(state==="online") txt = "Conectado ao banco (Neon)";
+    else if(state==="saving") txt = "Salvando no banco…";
+    else if(state==="saved") txt = "Salvo no banco" + (time ? " · "+time : "");
+    else if(state==="error") txt = "Erro ao salvar — verifique o banco";
+    else if(state==="unauthorized") txt = "Chave de acesso inválida";
+    else if(state==="offline") txt = "Modo offline — salvo só no navegador";
+    else txt = "";
+    el.hidden = false;
+    el.className = "db-status" + (state ? " "+state : "");
+    el.innerHTML = '<span class="dot"></span>' + esc(txt);
+    el.title = "Clique para testar a conexão com o banco";
+  }
+  function testConnection(){
+    setStatus("connecting");
+    serverGet().then(function(res){
+      if(res && res.unauthorized){ setStatus("unauthorized"); return; }
+      if(res && res.offline){ setStatus("offline"); return; }
+      serverPut(db).then(function(ok){ setStatus(ok ? "saved" : "error", nowHM()); });
+    });
+  }
   function start(){
     buildNav(); setView("overview");
     var note = document.getElementById("sync-note");
-    if(note) note.textContent = serverMode ? "Sincronizado com o banco de dados (Neon)." : "Salvo neste navegador (modo offline).";
+    if(note) note.textContent = currentUser
+      ? ("Conectado como " + currentUser.username + (serverMode ? " · banco de dados" : " · offline"))
+      : (serverMode ? "Sincronizado com o banco de dados (Neon)." : "Salvo neste navegador (modo offline).");
     var lock = document.getElementById("lock-btn");
-    if(lock) lock.hidden = !(serverMode && !!TOKEN);
+    if(lock) lock.hidden = !(serverMode || currentUser);
   }
-  function showGate(){
-    var g = document.getElementById("gate"); if(!g) return;
-    g.hidden = false;
-    var i = document.getElementById("gate-input"); if(i) i.focus();
+  function saveToken(t){ TOKEN = t || ""; try{ localStorage.setItem("fluxo:token", TOKEN); }catch(e){} }
+  function clearToken(){ TOKEN = ""; currentUser = null; try{ localStorage.removeItem("fluxo:token"); }catch(e){} }
+  function showAuth(mode){
+    var box = document.getElementById("auth"); if(!box) return;
+    box.hidden = false;
+    document.getElementById("login-form").hidden = mode !== "login";
+    document.getElementById("setup-form").hidden = mode !== "setup";
+    var f = mode === "setup" ? document.getElementById("setup-user") : document.getElementById("login-user");
+    if(f) setTimeout(function(){ try{ f.focus(); }catch(e){} }, 30);
   }
-  function boot(){
-    var content = document.getElementById("content");
-    if(content) content.innerHTML = '<div class="empty">Carregando seus dados…</div>';
-    serverGet().then(function(res){
-      if(res && res.unauthorized){ showGate(); return; }
-      if(res && res.data){ db = res.data; migrate(db); }
+  function hideAuth(){ var box = document.getElementById("auth"); if(box) box.hidden = true; }
+  function authMe(){
+    return fetch(AUTH.me, { headers: authHeaders() })
+      .then(function(r){
+        if(r.status === 401) return { unauth:true };
+        if(!r.ok) return { error:true };
+        return r.json().then(function(j){ return { user: j.user }; });
+      })
+      .catch(function(){ return { offline:true }; });
+  }
+  function checkSetup(){
+    return fetch(AUTH.setup, { headers: authHeaders() })
+      .then(function(r){ return r.ok ? r.json() : { needsSetup:false }; })
+      .catch(function(){ return { offline:true }; });
+  }
+  function afterSetupCheck(res){
+    if(res && res.offline){ serverMode = false; setStatus("offline"); db = loadLocal(); start(); return; }
+    if(res && res.needsSetup){ showAuth("setup"); } else { showAuth("login"); }
+  }
+  function loadState(){
+    return serverGet().then(function(res){
+      if(res && res.unauthorized){ clearToken(); return checkSetup().then(afterSetupCheck); }
+      if(res && res.data){ db = res.data; migrate(db); setStatus("online"); }
       else {
         db = loadLocal();
-        if(res && !res.offline){ serverPut(db); }
+        if(res && !res.offline){ serverPut(db).then(function(ok){ setStatus(ok ? "saved" : "error", nowHM()); }); }
+        else { setStatus("offline"); }
       }
       start();
     });
+  }
+  function boot(){
+    var content = document.getElementById("content");
+    if(content) content.innerHTML = '<div class="empty">Carregando…</div>';
+    setStatus("connecting");
+    if(TOKEN){
+      authMe().then(function(res){
+        if(res && res.user){ currentUser = res.user; loadState(); return; }
+        if(res && res.offline){ serverMode = false; setStatus("offline"); db = loadLocal(); start(); return; }
+        clearToken(); checkSetup().then(afterSetupCheck);
+      });
+    } else {
+      checkSetup().then(afterSetupCheck);
+    }
+  }
+  function logout(){
+    fetch(AUTH.logout, { method:"POST", headers: authHeaders() }).catch(function(){});
+    clearToken();
+    db = null;
+    var el = document.getElementById("db-status"); if(el) el.hidden = true;
+    showAuth("login");
   }
 
   /* ── cálculos ─────────────────────────────────────────────────────────── */
@@ -497,6 +614,79 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
   function dividaTotalCartao(){ return db.parcelamentos.reduce(function(s,p){ return s+Number(p.valorParcela)*(Number(p.parcelas)-Number(p.parcelaAtual)); },0); }
   function dividaTotalOutras(){ return db.dividas.reduce(function(s,d){ return s+(d.status!=="Quitada"?restanteDivida(d):0); },0); }
   function dividaTotal(){ return dividaTotalCartao()+dividaTotalOutras(); }
+
+  /* ── salário + projeção mês a mês ─────────────────────────────────────── */
+  function salarioEntry(){
+    var list = db.renda || [];
+    return list.filter(function(r){ return r.principal; })[0] || list.filter(function(r){ return r.tipo==="Fixo"; })[0] || null;
+  }
+  function salarioValor(){ var s = salarioEntry(); return s ? (Number(s.valor)||0) : 0; }
+  function setSalario(valor){
+    var s = salarioEntry();
+    if(s){ s.valor = Number(valor)||0; s.principal = true; }
+    else {
+      db.renda = db.renda || [];
+      db.renda.push({ id:uid(), descricao:"Meu salário", valor:Number(valor)||0, tipo:"Fixo", dia:5, principal:true });
+    }
+    save();
+  }
+  function comprometidoNoMes(k){
+    var s = 0;
+    (db.parcelamentos||[]).forEach(function(p){
+      var resta = Number(p.parcelas)-Number(p.parcelaAtual);
+      if(k < resta) s += Number(p.valorParcela);
+    });
+    (db.dividas||[]).forEach(function(d){
+      if(d.status==="Quitada") return;
+      if(parcelada(d)){ if(k < faltaDivida(d)) s += Number(d.parcela); }
+      else { s += Number(d.parcela); }
+    });
+    return s;
+  }
+  function projecaoMensal(n){
+    var r = rendaTotal(), out = [];
+    for(var k=0;k<n;k++){ var comp = comprometidoNoMes(k); out.push({ k:k, renda:r, comprometido:comp, sobra:r-comp }); }
+    return out;
+  }
+  function monthLabel(k, full){
+    var now = new Date();
+    var d = new Date(now.getFullYear(), now.getMonth()+k, 1);
+    if(full) return MESES[d.getMonth()]+" de "+d.getFullYear();
+    return MESABR[d.getMonth()]+"/"+String(d.getFullYear()).slice(2);
+  }
+  function fmtShort(v){
+    v = Math.abs(Number(v)||0);
+    if(v>=1000) return (Math.round(v/100)/10).toLocaleString("pt-BR")+"k";
+    return Math.round(v).toString();
+  }
+  function monthlyChart(rows){
+    var max = Math.max.apply(null, rows.map(function(m){ return Math.abs(m.sobra); }).concat([1]));
+    var html = '<div class="cols" style="height:150px">';
+    rows.forEach(function(m){
+      var h = Math.max(2, Math.abs(m.sobra)/max*130);
+      var cls = m.sobra>=0 ? "success" : "danger";
+      html += '<div class="col">'
+        + '<span class="col-val">'+(m.sobra<0?"-":"")+fmtShort(m.sobra)+'</span>'
+        + '<div class="col-bar '+cls+'" style="height:'+h+'px"></div>'
+        + '<span class="col-lbl">'+monthLabel(m.k,false).toUpperCase()+'</span></div>';
+    });
+    return html+'</div>';
+  }
+  function salarioCard(withLink){
+    var v = salarioValor();
+    return '<div class="panel salario" data-od-id="salario-card">'
+      + '<div>'
+      +   '<div class="kpi-label">Meu salário mensal</div>'
+      +   '<p class="muted" style="font-size:13px;margin-top:6px">Cadastre quanto você recebe por mês — o app calcula a sobra de cada mês com esse valor.</p>'
+      +   (withLink ? '<button class="btn btn-ghost btn-sm" data-goto="mensal" style="margin-top:10px;padding-left:0">Ver detalhes mês a mês →</button>' : '')
+      + '</div>'
+      + '<div class="salario-form">'
+      +   '<label class="field" style="margin:0"><span>Valor por mês (R$)</span>'
+      +   '<input id="sal-input" class="input" type="number" step="0.01" min="0" value="'+(v||"")+'" placeholder="Ex.: 5400" style="font-size:20px;font-family:var(--font-mono)"></label>'
+      +   '<button class="btn btn-primary" data-sal-save data-od-id="salvar-salario">Salvar salário</button>'
+      + '</div>'
+      + '</div>';
+  }
   function usadoCartao(cartaoId){
     var s = 0;
     db.parcelamentos.forEach(function(p){ if(p.cartaoId===cartaoId) s += Number(p.valorParcela)*(Number(p.parcelas)-Number(p.parcelaAtual)); });
@@ -590,6 +780,8 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
   var VIEWS = [
     {id:"overview",label:"Visão geral",title:"Visão geral",sub:"Seu painel de controle do mês",add:null,
       icon:'<path d="M4 13h6V4H4zM14 20h6v-9h-6zM4 20h6v-4H4zM14 8h6V4h-6z"/>'},
+    {id:"mensal",label:"Mês a mês",title:"Sobra mês a mês",sub:"Quanto sobra em cada mês",add:null,
+      icon:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/><path d="M7 14h3v3H7z"/>'},
     {id:"cartoes",label:"Cartões",title:"Cartões de crédito",sub:"Limite, fatura e uso por cartão",add:"cartoes",
       icon:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/>'},
     {id:"parcelamentos",label:"Cartão · parcelas",title:"Parcelamentos no cartão",sub:"Compras divididas no crédito e o quanto falta",add:"parcelamentos",
@@ -631,7 +823,7 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
   function render(){
     buildNav();
     var c = document.getElementById("content");
-    ({overview:renderOverview,cartoes:renderCartoes,parcelamentos:renderParcelamentos,
+    ({overview:renderOverview,mensal:renderMensal,cartoes:renderCartoes,parcelamentos:renderParcelamentos,
       dividas:renderDividas,renda:renderRenda,orcamento:renderOrcamento,
       relatorios:renderRelatorios,widget:renderWidget}[current])(c);
   }
@@ -649,12 +841,16 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
     db.cartoes.forEach(function(cc){ var uso=usadoCartao(cc.id); if(uso>0) venc.push({nome:"Fatura "+cc.nome, valor:Math.min(uso,Number(cc.limite)), dia:Number(cc.vencimento), tipo:"Cartão"}); });
     venc.sort(function(a,b){ return diasAte(a.dia)-diasAte(b.dia); });
 
-    var html = ''
+    var html = salarioCard(true)
     + '<div class="grid g-4" style="margin-bottom:20px">'
     +   kpi("Renda mensal", BRL(r), (db.renda.length)+" fonte(s) de renda","")
     +   kpi("Dívida total", BRL(dv), "Saldo devedor restante","danger")
     +   kpi("Parcelas do mês", BRL(comp), "Comprometimento ", "warn", PCT(pct))
     +   kpi("Sobra estimada", BRL(sobra), "Renda menos parcelas", sobra>=0?"success":"danger")
+    + '</div>'
+    + '<div class="panel" style="margin-bottom:20px" data-od-id="ov-mensal"><div class="panel-head"><h2>Sobra mês a mês</h2><button class="btn btn-ghost btn-sm" data-goto="mensal">Ver todos →</button></div>'
+    +   monthlyChart(projecaoMensal(6))
+    +   '<p class="muted" style="font-size:12px;margin-top:12px">Prévia dos próximos 6 meses — renda menos parcelas e dívidas. Abra “Mês a mês” para o detalhe de 24 meses.</p>'
     + '</div>'
     + '<div class="panel" style="margin-bottom:20px" data-od-id="ov-origem"><div class="panel-head"><h2>Comprometimento por origem</h2><span class="muted" style="font-size:12px">cartão x fora do cartão</span></div>'
     +   '<div class="bar-row"><div class="bar-top"><span>Parcelamentos no cartão de crédito</span><span class="amt">'+BRL(parcelaCartao())+' · '+PCT(comp>0?parcelaCartao()/comp*100:0)+'</span></div>'+bar(comp>0?parcelaCartao()/comp*100:0,"")+'</div>'
@@ -682,6 +878,35 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
     +   colChart(cols, true)
     + '</div>';
 
+    c.innerHTML = html;
+  }
+
+  function renderMensal(c){
+    var r = rendaTotal();
+    var rows = projecaoMensal(24);
+    var hoje = rows[0] || { k:0, renda:r, comprometido:0, sobra:r };
+    var best = rows.reduce(function(a,b){ return b.sobra>a.sobra ? b : a; }, rows[0]);
+    var html = salarioCard(false)
+      + '<div class="grid g-4" style="margin-bottom:20px">'
+      +   kpi("Renda mensal", BRL(r), "salário + outras fontes","")
+      +   kpi("Comprometido este mês", BRL(hoje.comprometido), "parcelas + dívidas","warn")
+      +   kpi("Sobra este mês", BRL(hoje.sobra), "renda − comprometido", hoje.sobra>=0?"success":"danger")
+      +   kpi("Maior sobra", BRL(best.sobra), "em "+monthLabel(best.k,true),"")
+      + '</div>'
+      + '<div class="panel" data-od-id="mensal-chart"><div class="panel-head"><h2>Sobra mês a mês</h2><span class="muted" style="font-size:12px">próximos 12 meses</span></div>'
+      +   monthlyChart(rows.slice(0,12))
+      + '</div>'
+      + '<div class="panel" style="margin-top:20px" data-od-id="mensal-tabela"><div class="panel-head"><h2>Detalhe por mês</h2><span class="muted" style="font-size:12px">próximos 24 meses</span></div>'
+      +   '<div class="table-wrap"><table class="ds-table"><thead><tr><th>Mês</th><th class="num">Renda</th><th class="num">Comprometido</th><th class="num">Sobra</th><th class="num">% comprometido</th></tr></thead><tbody>'
+      +   rows.map(function(m){
+            var pct = m.renda>0 ? m.comprometido/m.renda : 0;
+            return '<tr><td><strong>'+monthLabel(m.k,true)+'</strong></td>'
+              +'<td class="num">'+BRL(m.renda)+'</td>'
+              +'<td class="num">'+BRL(m.comprometido)+'</td>'
+              +'<td class="num" style="color:var(--'+(m.sobra>=0?"success":"danger")+');font-weight:600">'+BRL(m.sobra)+'</td>'
+              +'<td class="num">'+PCT(pct)+'</td></tr>';
+          }).join("")
+      +   '</tbody></table></div></div>';
     c.innerHTML = html;
   }
 
@@ -1003,6 +1228,17 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
     var b = e.target.closest("[data-new]"); if(!b) return; openForm(b.dataset.new, null);
   });
   document.getElementById("content").addEventListener("click", function(e){
+    var go = e.target.closest("[data-goto]");
+    if(go){ setView(go.dataset.goto); return; }
+    var sal = e.target.closest("[data-sal-save]");
+    if(sal){
+      var inp = document.getElementById("sal-input");
+      var v = inp ? (Number(inp.value)||0) : 0;
+      setSalario(v);
+      toast("Salário salvo: "+BRL(v));
+      render();
+      return;
+    }
     var b = e.target.closest("[data-act]"); if(!b) return;
     var act = b.dataset.act, id = b.dataset.id;
     var m = act.match(/^(edit|del|pay)-(.+)$/); if(!m) return;
@@ -1042,23 +1278,72 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
   });
   var lockBtn = document.getElementById("lock-btn");
   if(lockBtn){ lockBtn.addEventListener("click", function(){
-    try{ localStorage.removeItem("fluxo:token"); }catch(e){}
-    location.reload();
+    if(confirm("Sair da conta?")) logout();
   }); }
-  var gateForm = document.getElementById("gate-form");
-  if(gateForm){
-    gateForm.addEventListener("submit", function(e){
+  var statusEl = document.getElementById("db-status");
+  if(statusEl){ statusEl.addEventListener("click", testConnection); }
+  document.getElementById("content").addEventListener("keydown", function(e){
+    if(e.target && e.target.id==="sal-input" && (e.key==="Enter" || e.keyCode===13)){
       e.preventDefault();
-      TOKEN = (document.getElementById("gate-input").value || "").trim();
-      try{ localStorage.setItem("fluxo:token", TOKEN); }catch(err){}
-      serverGet().then(function(res){
-        if(res && res.unauthorized){ document.getElementById("gate-err").style.display = "block"; return; }
-        document.getElementById("gate-err").style.display = "none";
-        document.getElementById("gate").hidden = true;
-        if(res && res.data){ db = res.data; migrate(db); }
-        else { db = loadLocal(); if(res && !res.offline){ serverPut(db); } }
-        start();
-      });
+      var btn = document.querySelector("[data-sal-save]");
+      if(btn) btn.click();
+    }
+  });
+  var loginForm = document.getElementById("login-form");
+  if(loginForm){
+    loginForm.addEventListener("submit", function(e){
+      e.preventDefault();
+      var u = document.getElementById("login-user").value.trim();
+      var p = document.getElementById("login-pass").value;
+      var err = document.getElementById("login-err");
+      err.hidden = true;
+      var btn = this.querySelector("button[type=submit]");
+      if(btn) btn.disabled = true;
+      fetch(AUTH.login, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ username:u, password:p }) })
+        .then(function(r){ return r.json().then(function(j){ return { ok:r.ok, body:j }; }); })
+        .catch(function(){ return { ok:false, body:{ error:"Falha de rede. Tente novamente." } }; })
+        .then(function(res){
+          if(btn) btn.disabled = false;
+          if(res.ok && res.body.token){
+            saveToken(res.body.token);
+            currentUser = res.body.user;
+            hideAuth();
+            loadState();
+          } else {
+            err.textContent = (res.body && res.body.error) || "Usuário ou senha incorretos.";
+            err.hidden = false;
+          }
+        });
+    });
+  }
+  var setupForm = document.getElementById("setup-form");
+  if(setupForm){
+    setupForm.addEventListener("submit", function(e){
+      e.preventDefault();
+      var u = document.getElementById("setup-user").value.trim();
+      var p = document.getElementById("setup-pass").value;
+      var p2 = document.getElementById("setup-pass2").value;
+      var err = document.getElementById("setup-err");
+      err.hidden = true;
+      if(p.length < 6){ err.textContent = "A senha precisa ter ao menos 6 caracteres."; err.hidden = false; return; }
+      if(p !== p2){ err.textContent = "As senhas não conferem."; err.hidden = false; return; }
+      var btn = this.querySelector("button[type=submit]");
+      if(btn) btn.disabled = true;
+      fetch(AUTH.setup, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ username:u, password:p }) })
+        .then(function(r){ return r.json().then(function(j){ return { ok:r.ok, body:j }; }); })
+        .catch(function(){ return { ok:false, body:{ error:"Falha de rede. Tente novamente." } }; })
+        .then(function(res){
+          if(btn) btn.disabled = false;
+          if(res.ok && res.body.token){
+            saveToken(res.body.token);
+            currentUser = res.body.user;
+            hideAuth();
+            loadState();
+          } else {
+            err.textContent = (res.body && res.body.error) || "Não foi possível criar o usuário.";
+            err.hidden = false;
+          }
+        });
     });
   }
 

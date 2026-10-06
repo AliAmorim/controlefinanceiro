@@ -5,10 +5,15 @@
   "sourceFiles": {
     "all": [
       "api/init.js",
+      "api/login.js",
+      "api/logout.js",
+      "api/me.js",
+      "api/setup.js",
       "api/state.js",
       "controle-financeiro.html",
       "db/schema.sql",
       "DEPLOY.md",
+      "lib/auth.js",
       "package.json",
       "vercel.json"
     ],
@@ -18,7 +23,12 @@
     "css": [],
     "scriptsAndComponents": [
       "api/init.js",
-      "api/state.js"
+      "api/login.js",
+      "api/logout.js",
+      "api/me.js",
+      "api/setup.js",
+      "api/state.js",
+      "lib/auth.js"
     ],
     "assets": [
       "db/schema.sql",
@@ -85,7 +95,12 @@
   "interactions": {
     "source": [
       "api/init.js",
-      "api/state.js"
+      "api/login.js",
+      "api/logout.js",
+      "api/me.js",
+      "api/setup.js",
+      "api/state.js",
+      "lib/auth.js"
     ],
     "requiredStates": [
       "default",
