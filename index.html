@@ -333,7 +333,7 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
     <nav class="nav" id="nav" aria-label="Navegação principal"></nav>
     <div class="side-foot">
       <span id="sync-note">Conectando…</span>
-      <button type="button" id="reset-btn">Restaurar dados de exemplo</button>
+      <button type="button" id="reset-btn">Apagar todos os dados</button>
       <button type="button" id="lock-btn" hidden>Sair da conta</button>
     </div>
   </aside>
@@ -385,7 +385,7 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
 <script>
 (function(){
   "use strict";
-  var STORE = "fluxo:financas:v1";
+  var STORE = "fluxo:financas:v2";
   var API = "/api/state";
   var TOKEN = "";
   try{ TOKEN = localStorage.getItem("fluxo:token") || ""; }catch(e){}
@@ -402,33 +402,18 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
 
   function seed(){
     return {
-      renda:[
-        {id:"r1",descricao:"Salário — magistério",valor:5400,tipo:"Fixo",dia:5},
-        {id:"r2",descricao:"Aulas particulares",valor:850,tipo:"Variável",dia:20}
-      ],
-      cartoes:[
-        {id:"c1",nome:"Nubank",bandeira:"Mastercard",limite:8000,fechamento:20,vencimento:28},
-        {id:"c2",nome:"Itaú Click",bandeira:"Visa",limite:4500,fechamento:5,vencimento:12}
-      ],
-      parcelamentos:[
-        {id:"p1",descricao:"Notebook Dell",cartaoId:"c1",parcelas:12,parcelaAtual:4,valorParcela:350,categoria:"Educação",dataCompra:"2026-03-10"},
-        {id:"p2",descricao:"Geladeira Brastemp",cartaoId:"c2",parcelas:10,parcelaAtual:2,valorParcela:320,categoria:"Moradia",dataCompra:"2026-05-02"},
-        {id:"p3",descricao:"Celular Samsung",cartaoId:"c1",parcelas:18,parcelaAtual:9,valorParcela:233.33,categoria:"Outros",dataCompra:"2025-12-15"},
-        {id:"p4",descricao:"Curso de inglês",cartaoId:"c2",parcelas:6,parcelaAtual:5,valorParcela:180,categoria:"Educação",dataCompra:"2026-02-08"}
-      ],
-      dividas:[
-        {id:"d1",credor:"Empréstimo pessoal — Banco do Brasil",tipo:"Empréstimo",parcela:450,parcelas:12,parcelaAtual:4,saldo:3600,juros:1.8,vencimento:15,categoria:"Outros",status:"Em dia"},
-        {id:"d2",credor:"Loja de móveis — carnê",tipo:"Carnê",parcela:300,parcelas:6,parcelaAtual:2,saldo:1200,juros:2.5,vencimento:10,categoria:"Moradia",status:"Atenção"},
-        {id:"d3",credor:"Cheque especial — Itaú",tipo:"Cheque especial",parcela:280,parcelas:0,parcelaAtual:0,saldo:2200,juros:8.5,vencimento:5,categoria:"Outros",status:"Atenção"}
-      ],
+      renda:[],
+      cartoes:[],
+      parcelamentos:[],
+      dividas:[],
       categorias:[
-        {id:"cat1",nome:"Moradia",orcamento:1800},
-        {id:"cat2",nome:"Alimentação",orcamento:950},
-        {id:"cat3",nome:"Transporte",orcamento:450},
-        {id:"cat4",nome:"Saúde",orcamento:300},
-        {id:"cat5",nome:"Educação",orcamento:700},
-        {id:"cat6",nome:"Lazer",orcamento:250},
-        {id:"cat7",nome:"Outros",orcamento:650}
+        {id:"cat1",nome:"Moradia",orcamento:0},
+        {id:"cat2",nome:"Alimentação",orcamento:0},
+        {id:"cat3",nome:"Transporte",orcamento:0},
+        {id:"cat4",nome:"Saúde",orcamento:0},
+        {id:"cat5",nome:"Educação",orcamento:0},
+        {id:"cat6",nome:"Lazer",orcamento:0},
+        {id:"cat7",nome:"Outros",orcamento:0}
       ]
     };
   }
@@ -1051,8 +1036,8 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
     if(submitHandler) submitHandler(data);
   });
   document.getElementById("reset-btn").addEventListener("click", function(){
-    if(confirm("Restaurar os dados de exemplo? Seus registros atuais serão substituídos.")){
-      db = seed(); save(); toast("Dados de exemplo restaurados"); setView(current);
+    if(confirm("Apagar TODOS os dados (renda, cartões, parcelamentos e dívidas)? Esta ação não pode ser desfeita.")){
+      db = seed(); save(); toast("Todos os dados foram apagados"); setView(current);
     }
   });
   var lockBtn = document.getElementById("lock-btn");
