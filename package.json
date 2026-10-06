@@ -1,0 +1,9 @@
+{
+  "name": "fluxo-financas",
+  "version": "1.0.0",
+  "private": true,
+  "description": "App de controle financeiro pessoal com persistência em Postgres (Neon) na Vercel.",
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4"
+  }
+}
