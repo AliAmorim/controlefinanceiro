@@ -1,42 +1,20 @@
-// API do Fluxo — lê e grava o estado do app no Postgres (Neon).
+// API do Fluxo — lê e grava o estado do app no Postgres (Neon), por usuário.
+// Exige sessão válida (header Authorization: Bearer <token>).
 // GET  /api/state  -> { data: {...} | null }
 // POST /api/state  -> grava o corpo { data: {...} }
-//
-// Variáveis de ambiente (a Vercel configura automaticamente ao conectar o Neon):
-//   DATABASE_URL  (ou POSTGRES_URL / DATABASE_URL_UNPOOLED)
-//   APP_SECRET    (opcional, mas recomendado — chave de acesso do app)
-//   STATE_ID      (opcional — id do registro; padrão "aline")
 
-const { neon } = require("@neondatabase/serverless");
+const { getSql, currentUser } = require("../lib/auth");
 
 module.exports = async function handler(req, res) {
-  const url =
-    process.env.DATABASE_URL ||
-    process.env.POSTGRES_URL ||
-    process.env.DATABASE_URL_UNPOOLED;
-
-  if (!url) {
-    res.status(500).json({
-      error:
-        "DATABASE_URL não configurada. Conecte um banco Neon ao projeto na Vercel (aba Storage).",
-    });
-    return;
-  }
-
-  const secret = process.env.APP_SECRET || "";
-  if (secret) {
-    const auth = req.headers["authorization"] || "";
-    const token = auth.replace(/^Bearer\s+/i, "").trim();
-    if (token !== secret) {
-      res.status(401).json({ error: "unauthorized" });
+  try {
+    const sql = getSql();
+    const user = await currentUser(req, sql);
+    if (!user) {
+      res.status(401).json({ error: "não autenticado" });
       return;
     }
-  }
+    const id = "user:" + user.id;
 
-  const sql = neon(url);
-  const id = process.env.STATE_ID || "aline";
-
-  try {
     if (req.method === "GET") {
       const rows = await sql`select data, updated_at from app_state where id = ${id}`;
       if (!rows.length) {
