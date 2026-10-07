@@ -460,6 +460,8 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
   var saveTimer = null;
   var mesFrom = 0, mesTo = 11;
   try{ var _mf = JSON.parse(localStorage.getItem("fluxo:mesFiltro") || "null"); if(_mf && typeof _mf.from === "number"){ mesFrom = _mf.from; mesTo = _mf.to; } }catch(e){}
+  mesFrom = Math.max(0, Math.min(mesFrom, 35));
+  mesTo = Math.max(mesFrom, Math.min(mesTo, 35));
   var BRL = function(n){ return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(Number(n)||0); };
   var NUM = function(n){ return new Intl.NumberFormat("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(n)||0); };
   var PCT = function(n){ return (Math.round((Number(n)||0)*1000)/10).toLocaleString("pt-BR")+"%"; };
@@ -471,6 +473,7 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
 
   function seed(){
     return {
+      v:2,
       renda:[],
       cartoes:[],
       parcelamentos:[],
@@ -490,19 +493,26 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
   var db = null;
 
   function loadLocal(){
-    try{ var raw = localStorage.getItem(STORE); if(raw){ var d = JSON.parse(raw); migrate(d); return d; } }catch(e){}
+    try{ var raw = localStorage.getItem(STORE); if(raw){ var d = JSON.parse(raw); if(migrate(d)){ try{ localStorage.setItem(STORE, JSON.stringify(d)); }catch(e){} } return d; } }catch(e){}
     var s = seed(); try{ localStorage.setItem(STORE, JSON.stringify(s)); }catch(e){}
     return s;
   }
   function migrate(d){
-    if(!d || !Array.isArray(d.dividas)) return;
+    if(!d || typeof d !== "object") return false;
+    var changed = false;
+    if(d.v !== 2){
+      (d.parcelamentos || []).forEach(function(p){ p.parcelaAtual = (Number(p.parcelaAtual)||0) + 1; });
+      d.v = 2; changed = true;
+    }
+    if(!Array.isArray(d.dividas)) return changed;
     d.dividas.forEach(function(x){
       if(x.parcelas === undefined){
         var pg = Number(x.parcela)||0, saldo = Number(x.saldo)||0;
         x.parcelas = (pg>0 && saldo>0) ? Math.ceil(saldo/pg) : 0;
-        x.parcelaAtual = 0;
+        x.parcelaAtual = 0; changed = true;
       }
     });
+    return changed;
   }
   function save(){
     try{ localStorage.setItem(STORE, JSON.stringify(db)); }catch(e){}
@@ -609,7 +619,7 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
   function loadState(){
     return serverGet().then(function(res){
       if(res && res.unauthorized){ clearToken(); return checkSetup().then(afterSetupCheck); }
-      if(res && res.data){ db = res.data; migrate(db); setStatus("online"); }
+      if(res && res.data){ db = res.data; if(migrate(db)){ save(); } setStatus("online"); }
       else {
         db = loadLocal();
         if(res && !res.offline){ serverPut(db).then(function(ok){ setStatus(ok ? "saved" : "error", nowHM()); }); }
@@ -642,7 +652,9 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
 
   /* ── cálculos ─────────────────────────────────────────────────────────── */
   function rendaTotal(){ return db.renda.reduce(function(s,r){ return s+Number(r.valor); },0); }
-  function ativa(p){ return Number(p.parcelaAtual) < Number(p.parcelas); }
+  function parcelaNum(p){ var n = Number(p.parcelaAtual); return n > 0 ? n : 1; }
+  function restamParcelas(p){ return Math.max(0, Number(p.parcelas) - parcelaNum(p) + 1); }
+  function ativa(p){ return restamParcelas(p) > 0; }
   function parcelada(d){ return Number(d.parcelas) > 0; }
   function ativaDivida(d){ return d.status!=="Quitada" && (!parcelada(d) || Number(d.parcelaAtual||0) < Number(d.parcelas)); }
   function faltaDivida(d){ return parcelada(d) ? Math.max(0, Number(d.parcelas)-Number(d.parcelaAtual||0)) : 0; }
@@ -650,7 +662,7 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
   function parcelaCartao(){ return db.parcelamentos.reduce(function(s,p){ return s+(ativa(p)?Number(p.valorParcela):0); },0); }
   function parcelaOutras(){ return db.dividas.reduce(function(s,d){ return s+(ativaDivida(d)?Number(d.parcela):0); },0); }
   function parcelaMensal(){ return parcelaCartao()+parcelaOutras(); }
-  function dividaTotalCartao(){ return db.parcelamentos.reduce(function(s,p){ return s+Number(p.valorParcela)*(Number(p.parcelas)-Number(p.parcelaAtual)); },0); }
+  function dividaTotalCartao(){ return db.parcelamentos.reduce(function(s,p){ return s+Number(p.valorParcela)*restamParcelas(p); },0); }
   function dividaTotalOutras(){ return db.dividas.reduce(function(s,d){ return s+(d.status!=="Quitada"?restanteDivida(d):0); },0); }
   function dividaTotal(){ return dividaTotalCartao()+dividaTotalOutras(); }
 
@@ -672,8 +684,7 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
   function comprometidoNoMes(k){
     var s = 0;
     (db.parcelamentos||[]).forEach(function(p){
-      var resta = Number(p.parcelas)-Number(p.parcelaAtual);
-      if(k < resta) s += Number(p.valorParcela);
+      if(k < restamParcelas(p)) s += Number(p.valorParcela);
     });
     (db.dividas||[]).forEach(function(d){
       if(d.status==="Quitada") return;
@@ -697,6 +708,12 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
     var out = "";
     for(var k=0;k<36;k++){ out += '<option value="'+k+'"'+(k===sel?" selected":"")+'>'+monthLabel(k,true)+'</option>'; }
     return out;
+  }
+  function mesFilterBar(){
+    return '<div class="mfilter">'
+      + '<label class="mfilter-f"><span>De</span><select class="input" data-mes="from" aria-label="Mês inicial">'+mesOptions(mesFrom)+'</select></label>'
+      + '<label class="mfilter-f"><span>Até</span><select class="input" data-mes="to" aria-label="Mês final">'+mesOptions(mesTo)+'</select></label>'
+      + '</div>';
   }
   function monthlyList(rows){
     var max = Math.max.apply(null, rows.map(function(m){ return Math.abs(m.sobra); }).concat([1]));
@@ -727,8 +744,27 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
   }
   function usadoCartao(cartaoId){
     var s = 0;
-    db.parcelamentos.forEach(function(p){ if(p.cartaoId===cartaoId) s += Number(p.valorParcela)*(Number(p.parcelas)-Number(p.parcelaAtual)); });
+    db.parcelamentos.forEach(function(p){ if(p.cartaoId===cartaoId) s += Number(p.valorParcela)*restamParcelas(p); });
     return s;
+  }
+  function payFatura(cardId){
+    var card = db.cartoes.filter(function(c){ return c.id===cardId; })[0];
+    var ativas = db.parcelamentos.filter(function(p){ return p.cartaoId===cardId && ativa(p); });
+    if(!ativas.length){ toast("Nada a pagar neste cartão"); return; }
+    if(!confirm("Marcar a fatura de \""+(card?card.nome:"cartão")+"\" como paga? "+ativas.length+" parcela(s) avançam um mês.")) return;
+    ativas.forEach(function(p){ p.parcelaAtual = Number(p.parcelaAtual)+1; });
+    save();
+    toast("Fatura de "+(card?card.nome:"cartão")+" paga · "+ativas.length+" parcela(s)");
+    render();
+  }
+  function payAllFaturas(){
+    var ativas = db.parcelamentos.filter(ativa);
+    if(!ativas.length){ toast("Nada a pagar"); return; }
+    if(!confirm("Marcar TODAS as faturas como pagas? "+ativas.length+" parcela(s) avançam um mês.")) return;
+    ativas.forEach(function(p){ p.parcelaAtual = Number(p.parcelaAtual)+1; });
+    save();
+    toast("Todas as faturas pagas · "+ativas.length+" parcela(s)");
+    render();
   }
   function comprometidoCat(nome){
     var s = 0;
@@ -787,7 +823,7 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
         {name:"categoria",label:"Categoria",type:"select",value:v&&v.categoria,options:CATS()},
         {name:"valorParcela",label:"Valor da parcela (R$)",type:"number",step:"0.01",min:"0",required:true,value:v&&v.valorParcela},
         {name:"parcelas",label:"Total de parcelas",type:"number",min:"1",required:true,value:v&&v.parcelas,placeholder:"Ex.: 12"},
-        {name:"parcelaAtual",label:"Parcela atual (paga)",type:"number",min:"0",value:v?v.parcelaAtual:0},
+        {name:"parcelaAtual",label:"Parcela atual (a que está pagando)",type:"number",min:"1",value:v?parcelaNum(v):1,placeholder:"Ex.: 5 de 12 → digite 5"},
         {name:"dataCompra",label:"Data da compra",type:"date",value:v&&v.dataCompra}
       ]}; },
     dividas: function(v){ return {
@@ -884,7 +920,9 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
     +   kpi("Sobra estimada", BRL(sobra), "Renda menos parcelas", sobra>=0?"success":"danger")
     + '</div>'
     + '<div class="panel" style="margin-bottom:20px" data-od-id="ov-mensal"><div class="panel-head"><h2>Sobra mês a mês</h2><button class="btn btn-ghost btn-sm" data-goto="mensal">Ver todos →</button></div>'
-    +   monthlyList(projecaoMensal(6))
+    +   mesFilterBar()
+    +   monthlyList(projecaoMensal(36).slice(mesFrom, mesTo+1).slice(0,6))
+    +   ((mesTo-mesFrom+1) > 6 ? '<p class="muted" style="font-size:12px;margin-top:12px">Mostrando os 6 primeiros de '+(mesTo-mesFrom+1)+' meses — abra “Mês a mês” para o período completo.</p>' : '')
     + '</div>'
     + '<div class="panel" data-od-id="ov-vencimentos"><div class="panel-head"><h2>Próximos vencimentos</h2></div>'
     +   (venc.length? '<div class="list">'+venc.slice(0,6).map(function(x){
@@ -919,10 +957,7 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
       +   kpi("Sobra sem as parcelas", BRL(sobraFolga), (kFolga===0?"já neste mês":"a partir de "+monthLabel(kFolga,true)), sobraFolga>=0?"success":"danger")
       + '</div>'
       + '<div class="panel" data-od-id="mensal-lista"><div class="panel-head"><h2>Sobra por mês</h2></div>'
-      +   '<div class="mfilter">'
-      +     '<label class="mfilter-f"><span>De</span><select class="input" data-mes="from" aria-label="Mês inicial">'+mesOptions(from)+'</select></label>'
-      +     '<label class="mfilter-f"><span>Até</span><select class="input" data-mes="to" aria-label="Mês final">'+mesOptions(to)+'</select></label>'
-      +   '</div>'
+      +   mesFilterBar()
       +   monthlyList(range)
       +   '<p class="muted" style="font-size:12px;margin-top:14px">'+range.length+' mês(es) · sobra acumulada <b class="mono">'+BRL(totalSobra)+'</b> · média <b class="mono">'+BRL(media)+'</b> por mês. Verde = sobra · vermelho = falta.</p>'
       + '</div>';
@@ -953,11 +988,21 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
   function renderCartoes(c){
     var totalLim = db.cartoes.reduce(function(s,cc){return s+Number(cc.limite);},0);
     var totalUso = db.cartoes.reduce(function(s,cc){return s+usadoCartao(cc.id);},0);
-    var html = '<div class="grid g-3" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">';
+    var totalAtivas = db.parcelamentos.filter(ativa).length;
+    var html = '';
+    if(totalAtivas > 0){
+      html += '<div class="row-between" style="margin-bottom:16px;flex-wrap:wrap;gap:10px">'
+        + '<p class="muted" style="font-size:13px;margin:0">Pague a fatura de um cartão de uma vez — todas as parcelas do mês avançam juntas.</p>'
+        + '<button class="btn btn-secondary" data-payall data-od-id="pagar-todas-faturas">Pagar todas as faturas</button>'
+        + '</div>';
+    }
+    html += '<div class="grid g-3" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">';
     db.cartoes.forEach(function(cc){
       var uso = usadoCartao(cc.id), lim = Number(cc.limite);
       var disp = Math.max(0, lim-uso), f = lim>0?uso/lim*100:0;
       var cls = f>90?"danger":(f>70?"warn":"");
+      var ativas = db.parcelamentos.filter(function(p){ return p.cartaoId===cc.id && ativa(p); });
+      var fatura = ativas.reduce(function(s,p){ return s+Number(p.valorParcela); },0);
       html += '<div class="cccard" data-od-id="card-'+cc.id+'">'
         + '<div class="cc-top"><div><div class="cc-nm">'+esc(cc.nome)+'</div><div class="cc-bd">'+esc(cc.bandeira).toUpperCase()+'</div></div>'
         +   '<div class="acts" style="display:flex;gap:6px">'
@@ -968,6 +1013,10 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
         + bar(f,cls)
         + '<div class="cc-lim"><span>Uso: '+BRL(uso)+'</span><span>Limite: '+BRL(lim)+'</span></div>'
         + '<div class="cc-lim"><span>Fecha dia '+cc.fechamento+'</span><span>Vence dia '+cc.vencimento+'</span></div>'
+        + '<div class="cc-lim"><span>Fatura deste mês</span><span>'+BRL(fatura)+'</span></div>'
+        + (ativas.length
+            ? '<button class="btn btn-primary btn-sm" data-payfat="'+cc.id+'" data-od-id="pagar-fatura-'+cc.id+'" style="justify-content:center;margin-top:4px">Pagar fatura ('+ativas.length+')</button>'
+            : '<button class="btn btn-secondary btn-sm" disabled style="justify-content:center;margin-top:4px">Fatura paga</button>')
         + '</div>';
     });
     if(!db.cartoes.length) html += emptyState("Nenhum cartão cadastrado ainda.");
@@ -981,15 +1030,17 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
     if(!db.parcelamentos.length){ c.innerHTML = emptyState("Nenhum parcelamento no cartão. Adicione uma compra dividida no crédito."); return; }
     var rows = db.parcelamentos.map(function(p){
       var cartao = db.cartoes.find(function(x){return x.id===p.cartaoId;});
-      var falta = Number(p.parcelas)-Number(p.parcelaAtual);
+      var num = parcelaNum(p);
+      var falta = restamParcelas(p);
       var restante = falta*Number(p.valorParcela);
-      var f = Number(p.parcelaAtual)/Number(p.parcelas)*100;
+      var pago = Math.min(num-1, Number(p.parcelas));
+      var f = Number(p.parcelas)>0 ? pago/Number(p.parcelas)*100 : 0;
       var st = !ativa(p)?"success":(f>=75?"warn":"accent");
       return '<tr>'
         +'<td><strong>'+esc(p.descricao)+'</strong><br><span class="muted" style="font-size:12px">'+esc(cartao?cartao.nome:"—")+' · '+esc(p.categoria)+'</span></td>'
         +'<td class="num">'+BRL(p.valorParcela)+'</td>'
-        +'<td class="num">'+p.parcelaAtual+'/'+p.parcelas+'</td>'
-        +'<td style="min-width:120px"><div class="bar-top" style="margin-bottom:4px"><span class="chip '+st+'">'+(!ativa(p)?"Quitado":falta+" restantes")+'</span></div>'+bar(f,st==="accent"?"":st)+'</td>'
+        +'<td>'+(ativa(p)? 'Parcela <b>'+num+'</b> de '+p.parcelas : '<span class="chip success">Quitado</span>')+'</td>'
+        +'<td style="min-width:120px">'+bar(f,st==="accent"?"":st)+'</td>'
         +'<td class="num">'+BRL(restante)+'</td>'
         +'<td><div class="acts" style="display:inline-flex;gap:6px;justify-content:flex-end">'
         + (ativa(p)?'<button class="btn btn-secondary btn-sm" data-act="pay-parcelamentos" data-id="'+p.id+'">Pagar parcela</button>':'')
@@ -999,7 +1050,7 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
     }).join("");
     c.innerHTML = '<div class="panel" data-od-id="tab-parcelamentos"><div class="panel-head"><h2>Compras parceladas no cartão</h2><span class="chip accent">Cartão de crédito</span></div>'
       +'<div class="table-wrap"><table class="ds-table">'
-      +'<thead><tr><th>Compra</th><th class="num">Parcela</th><th class="num">Progresso</th><th>Status</th><th class="num">Restante</th><th></th></tr></thead>'
+      +'<thead><tr><th>Compra</th><th class="num">Parcela</th><th>Parcela atual</th><th>Progresso</th><th class="num">Restante</th><th></th></tr></thead>'
       +'<tbody>'+rows+'</tbody></table></div></div>'
       +'<p class="muted" style="margin-top:14px;font-size:13px">Total mensal no cartão: <b class="mono">'+BRL(parcelaCartao())+'</b> · saldo restante <b class="mono">'+BRL(dividaTotalCartao())+'</b>.</p>';
   }
@@ -1258,6 +1309,10 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
       render();
       return;
     }
+    var fat = e.target.closest("[data-payfat]");
+    if(fat){ payFatura(fat.dataset.payfat); return; }
+    var allfat = e.target.closest("[data-payall]");
+    if(allfat){ payAllFaturas(); return; }
     var b = e.target.closest("[data-act]"); if(!b) return;
     var act = b.dataset.act, id = b.dataset.id;
     var m = act.match(/^(edit|del|pay)-(.+)$/); if(!m) return;
@@ -1271,15 +1326,25 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
         save(); toast("Registro excluído"); render();
       }
     } else if(op==="pay"){
-      var falta = Number(rec.parcelas)-Number(rec.parcelaAtual);
-      if(falta<=0) return;
-      rec.parcelaAtual = Number(rec.parcelaAtual)+1;
-      var quitou = rec.parcelaAtual>=Number(rec.parcelas);
-      if(kind==="dividas" && quitou) rec.status = "Quitada";
-      save();
-      if(quitou) toast(kind==="dividas" ? "Dívida quitada" : "Parcelamento quitado");
-      else toast("Parcela paga · faltam "+(falta-1));
-      render();
+      if(kind==="parcelamentos"){
+        var num = parcelaNum(rec);
+        if(num > Number(rec.parcelas)) return;
+        rec.parcelaAtual = num + 1;
+        save();
+        if(rec.parcelaAtual > Number(rec.parcelas)) toast("Parcelamento quitado");
+        else toast("Parcela "+num+" paga · agora "+rec.parcelaAtual+" de "+rec.parcelas);
+        render();
+      } else {
+        var falta = Number(rec.parcelas)-Number(rec.parcelaAtual);
+        if(falta<=0) return;
+        rec.parcelaAtual = Number(rec.parcelaAtual)+1;
+        var quitou = rec.parcelaAtual>=Number(rec.parcelas);
+        if(kind==="dividas" && quitou) rec.status = "Quitada";
+        save();
+        if(quitou) toast(kind==="dividas" ? "Dívida quitada" : "Parcelamento quitado");
+        else toast("Parcela paga · faltam "+(falta-1));
+        render();
+      }
     }
   });
   document.getElementById("modal-cancel").addEventListener("click", function(){ dlg.close(); });
