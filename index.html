@@ -656,7 +656,30 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
   function restamParcelas(p){ return Math.max(0, Number(p.parcelas) - parcelaNum(p) + 1); }
   function ativa(p){ return restamParcelas(p) > 0; }
   function parcelada(d){ return Number(d.parcelas) > 0; }
-  function ativaDivida(d){ return d.status!=="Quitada" && (!parcelada(d) || Number(d.parcelaAtual||0) < Number(d.parcelas)); }
+  function mesAtualISO(){ var n = new Date(); return n.getFullYear()+"-"+String(n.getMonth()+1).padStart(2,"0"); }
+  function mesesDesdeInicio(d){
+    if(!d.inicio) return 0;
+    var p = String(d.inicio).split("-"); if(p.length < 2) return 0;
+    var y = Number(p[0]), m = Number(p[1]) - 1;
+    if(isNaN(y) || isNaN(m)) return 0;
+    var now = new Date();
+    return (y - now.getFullYear())*12 + (m - now.getMonth());
+  }
+  function mesLabelISO(iso){
+    if(!iso) return "";
+    var p = String(iso).split("-"); if(p.length < 2) return "";
+    var m = Number(p[1]) - 1; if(isNaN(m) || m < 0 || m > 11) return "";
+    return MESABR[m]+"/"+String(p[0]).slice(2);
+  }
+  function ativaDivida(d){
+    if(d.status==="Quitada") return false;
+    var startOff = mesesDesdeInicio(d);
+    if(parcelada(d)){
+      var idx = -startOff;
+      return idx >= Number(d.parcelaAtual||0) && idx < Number(d.parcelas);
+    }
+    return startOff <= 0;
+  }
   function faltaDivida(d){ return parcelada(d) ? Math.max(0, Number(d.parcelas)-Number(d.parcelaAtual||0)) : 0; }
   function restanteDivida(d){ return parcelada(d) ? Number(d.parcela)*faltaDivida(d) : (Number(d.saldo)||0); }
   function parcelaCartao(){ return db.parcelamentos.reduce(function(s,p){ return s+(ativa(p)?Number(p.valorParcela):0); },0); }
@@ -688,8 +711,13 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
     });
     (db.dividas||[]).forEach(function(d){
       if(d.status==="Quitada") return;
-      if(parcelada(d)){ if(k < faltaDivida(d)) s += Number(d.parcela); }
-      else { s += Number(d.parcela); }
+      var startOff = mesesDesdeInicio(d);
+      if(parcelada(d)){
+        var idx = k - startOff;
+        if(idx >= Number(d.parcelaAtual||0) && idx < Number(d.parcelas)) s += Number(d.parcela);
+      } else if(k >= startOff){
+        s += Number(d.parcela);
+      }
     });
     return s;
   }
@@ -832,6 +860,7 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
         {name:"credor",label:"Credor / descrição",type:"text",required:true,value:v&&v.credor,placeholder:"Ex.: Empréstimo pessoal — Banco X",full:true},
         {name:"tipo",label:"Tipo",type:"select",value:v&&v.tipo,options:[{value:"Empréstimo",label:"Empréstimo"},{value:"Carnê",label:"Carnê"},{value:"Cheque especial",label:"Cheque especial"},{value:"Financiamento",label:"Financiamento"},{value:"Parcelado sem juros",label:"Parcelado sem juros"},{value:"Outro",label:"Outro"}]},
         {name:"categoria",label:"Categoria",type:"select",value:v&&v.categoria,options:CATS()},
+        {name:"inicio",label:"Mês de início (1ª parcela)",type:"month",value:(v&&v.inicio)?v.inicio:mesAtualISO()},
         {name:"parcela",label:"Valor da parcela (R$)",type:"number",step:"0.01",min:"0",required:true,value:v&&v.parcela},
         {name:"parcelas",label:"Em quantas vezes / meses",type:"number",min:"0",value:v&&v.parcelas,placeholder:"Ex.: 24  (0 = sem parcelamento)"},
         {name:"parcelaAtual",label:"Parcelas já pagas",type:"number",min:"0",value:v&&v.parcelaAtual,placeholder:"Ex.: 4"},
@@ -908,7 +937,7 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
     var sobra = r - comp;
 
     var venc = [];
-    db.dividas.forEach(function(d){ if(d.status!=="Quitada") venc.push({nome:d.credor, valor:d.parcela, dia:Number(d.vencimento), tipo:"Dívida"}); });
+    db.dividas.forEach(function(d){ if(d.status!=="Quitada" && mesesDesdeInicio(d)<=0) venc.push({nome:d.credor, valor:d.parcela, dia:Number(d.vencimento), tipo:"Dívida"}); });
     db.cartoes.forEach(function(cc){ var uso=usadoCartao(cc.id); if(uso>0) venc.push({nome:"Fatura "+cc.nome, valor:Math.min(uso,Number(cc.limite)), dia:Number(cc.vencimento), tipo:"Cartão"}); });
     venc.sort(function(a,b){ return diasAte(a.dia)-diasAte(b.dia); });
 
@@ -1065,7 +1094,7 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
       var f = par ? Number(d.parcelaAtual||0)/Number(d.parcelas)*100 : 0;
       var st = !ativaDivida(d) ? "success" : (par && f>=75 ? "warn" : "accent");
       return '<tr>'
-        +'<td><strong>'+esc(d.credor)+'</strong><br><span class="muted" style="font-size:12px">'+esc(d.tipo)+' · '+esc(d.categoria)+(d.vencimento?(' · vence dia '+d.vencimento):'')+(Number(d.juros)?(' · '+NUM(d.juros)+'%/mês'):'')+'</span></td>'
+        +'<td><strong>'+esc(d.credor)+'</strong><br><span class="muted" style="font-size:12px">'+esc(d.tipo)+' · '+esc(d.categoria)+(d.inicio?(' · início '+mesLabelISO(d.inicio)):'')+(d.vencimento?(' · vence dia '+d.vencimento):'')+(Number(d.juros)?(' · '+NUM(d.juros)+'%/mês'):'')+'</span></td>'
         +'<td class="num">'+BRL(d.parcela)+'</td>'
         +'<td class="num">'+(par ? (Number(d.parcelaAtual||0)+'/'+d.parcelas) : '—')+'</td>'
         +'<td style="min-width:140px">'
@@ -1192,7 +1221,7 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
   function renderWidget(c){
     var r = rendaTotal(), comp = parcelaMensal(), dv = dividaTotal(), pct = comprometimentoPct();
     var venc = [];
-    db.dividas.forEach(function(d){ if(d.status!=="Quitada") venc.push({nome:d.credor,dia:Number(d.vencimento),valor:d.parcela}); });
+    db.dividas.forEach(function(d){ if(d.status!=="Quitada" && mesesDesdeInicio(d)<=0) venc.push({nome:d.credor,dia:Number(d.vencimento),valor:d.parcela}); });
     db.cartoes.forEach(function(cc){ var u=usadoCartao(cc.id); if(u>0) venc.push({nome:"Fatura "+cc.nome,dia:Number(cc.vencimento),valor:Math.min(u,Number(cc.limite))}); });
     venc.sort(function(a,b){return diasAte(a.dia)-diasAte(b.dia);});
     var next = venc[0];
