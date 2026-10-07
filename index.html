@@ -487,6 +487,7 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
   var mesBase = "";
   try{ mesBase = localStorage.getItem("fluxo:mesBase") || ""; }catch(e){}
   if(!/^\d{4}-\d{2}$/.test(mesBase)){ var _now = new Date(); mesBase = _now.getFullYear()+"-"+String(_now.getMonth()+1).padStart(2,"0"); }
+  var faturaMes = "";
   var BRL = function(n){ return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(Number(n)||0); };
   var NUM = function(n){ return new Intl.NumberFormat("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(n)||0); };
   var PCT = function(n){ return (Math.round((Number(n)||0)*1000)/10).toLocaleString("pt-BR")+"%"; };
@@ -795,6 +796,17 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
       + '<label class="mfilter-f"><span>Até</span><select class="input" data-mes="to" aria-label="Mês final">'+mesOptions(mesTo)+'</select></label>'
       + '</div>';
   }
+  function faturaOffset(){ return faturaMes ? mesOffsetISO(faturaMes) : 0; }
+  function faturaLabel(){ return faturaMes ? labelFromISO(faturaMes) : monthLabel(0, true); }
+  function fatOptions(){
+    var out = "", b = mesBaseParts(), cur = faturaMes || mesBase;
+    for(var k=0;k<12;k++){
+      var d = new Date(b.y, b.m+k, 1);
+      var iso = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+      out += '<option value="'+iso+'"'+(iso===cur?" selected":"")+'>'+MESES[d.getMonth()]+" de "+d.getFullYear()+'</option>';
+    }
+    return out;
+  }
   function monthlyList(rows){
     var max = Math.max.apply(null, rows.map(function(m){ return Math.abs(m.sobra); }).concat([1]));
     return '<div class="mlist">' + rows.map(function(m){
@@ -883,21 +895,23 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
   }
   function payFatura(cardId){
     var card = db.cartoes.filter(function(c){ return c.id===cardId; })[0];
-    var ativas = db.parcelamentos.filter(function(p){ return p.cartaoId===cardId && devidaNoMes(p,0); });
-    if(!ativas.length){ toast("Nada a pagar neste cartão"); return; }
-    if(!confirm("Marcar a fatura de \""+(card?card.nome:"cartão")+"\" como paga? "+ativas.length+" parcela(s) avançam um mês.")) return;
+    var off = faturaOffset();
+    var ativas = db.parcelamentos.filter(function(p){ return p.cartaoId===cardId && devidaNoMes(p, off); });
+    if(!ativas.length){ toast("Nada a pagar nesta fatura"); return; }
+    if(!confirm("Marcar a fatura de \""+(card?card.nome:"cartão")+"\" ("+faturaLabel()+") como paga? "+ativas.length+" parcela(s) avançam um mês.")) return;
     ativas.forEach(function(p){ p.parcelaAtual = Number(p.parcelaAtual)+1; });
     save();
     toast("Fatura de "+(card?card.nome:"cartão")+" paga · "+ativas.length+" parcela(s)");
     render();
   }
   function payAllFaturas(){
-    var ativas = db.parcelamentos.filter(function(p){ return devidaNoMes(p,0); });
+    var off = faturaOffset();
+    var ativas = db.parcelamentos.filter(function(p){ return devidaNoMes(p, off); });
     if(!ativas.length){ toast("Nada a pagar"); return; }
-    if(!confirm("Marcar TODAS as faturas como pagas? "+ativas.length+" parcela(s) avançam um mês.")) return;
+    if(!confirm("Marcar todas as faturas de "+faturaLabel()+" como pagas? "+ativas.length+" parcela(s) avançam um mês.")) return;
     ativas.forEach(function(p){ p.parcelaAtual = Number(p.parcelaAtual)+1; });
     save();
-    toast("Todas as faturas pagas · "+ativas.length+" parcela(s)");
+    toast("Faturas de "+faturaLabel()+" pagas · "+ativas.length+" parcela(s)");
     render();
   }
   function comprometidoCat(nome){
@@ -1128,12 +1142,16 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
   function renderCartoes(c){
     var totalLim = db.cartoes.reduce(function(s,cc){return s+Number(cc.limite);},0);
     var totalUso = db.cartoes.reduce(function(s,cc){return s+usadoCartao(cc.id);},0);
-    var totalAtivas = db.parcelamentos.filter(function(p){ return devidaNoMes(p,0); }).length;
-    var html = '';
+    var off = faturaOffset();
+    var totalAtivas = db.parcelamentos.filter(function(p){ return devidaNoMes(p, off); }).length;
+    var html = '<div class="row-between" style="margin-bottom:16px;flex-wrap:wrap;gap:10px">'
+      + '<p class="muted" style="font-size:13px;margin:0">Escolha o mês da fatura para ver e pagar as parcelas daquele mês.</p>'
+      + '<label class="mesbase">Fatura de <select data-fatmes aria-label="Mês da fatura">'+fatOptions()+'</select></label>'
+      + '</div>';
     if(totalAtivas > 0){
       html += '<div class="row-between" style="margin-bottom:16px;flex-wrap:wrap;gap:10px">'
         + '<p class="muted" style="font-size:13px;margin:0">Pague a fatura de um cartão de uma vez — todas as parcelas do mês avançam juntas.</p>'
-        + '<button class="btn btn-secondary" data-payall data-od-id="pagar-todas-faturas">Pagar todas as faturas</button>'
+        + '<button class="btn btn-secondary" data-payall data-od-id="pagar-todas-faturas">Pagar todas as faturas de '+faturaLabel()+'</button>'
         + '</div>';
     }
     html += '<div class="grid g-3" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">';
@@ -1141,7 +1159,7 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
       var uso = usadoCartao(cc.id), lim = Number(cc.limite);
       var disp = Math.max(0, lim-uso), f = lim>0?uso/lim*100:0;
       var cls = f>90?"danger":(f>70?"warn":"");
-      var ativas = db.parcelamentos.filter(function(p){ return p.cartaoId===cc.id && devidaNoMes(p,0); });
+      var ativas = db.parcelamentos.filter(function(p){ return p.cartaoId===cc.id && devidaNoMes(p, off); });
       var fatura = ativas.reduce(function(s,p){ return s+Number(p.valorParcela); },0);
       html += '<div class="cccard" data-od-id="card-'+cc.id+'">'
         + '<div class="cc-top"><div><div class="cc-nm">'+esc(cc.nome)+'</div><div class="cc-bd">'+esc(cc.bandeira).toUpperCase()+'</div></div>'
@@ -1153,10 +1171,10 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
         + bar(f,cls)
         + '<div class="cc-lim"><span>Uso: '+BRL(uso)+'</span><span>Limite: '+BRL(lim)+'</span></div>'
         + '<div class="cc-lim"><span>Fecha dia '+cc.fechamento+'</span><span>Vence dia '+cc.vencimento+'</span></div>'
-        + '<div class="cc-lim"><span>Fatura deste mês</span><span>'+BRL(fatura)+'</span></div>'
+        + '<div class="cc-lim"><span>Fatura de '+faturaLabel()+'</span><span>'+BRL(fatura)+'</span></div>'
         + (ativas.length
             ? '<button class="btn btn-primary btn-sm" data-payfat="'+cc.id+'" data-od-id="pagar-fatura-'+cc.id+'" style="justify-content:center;margin-top:4px">Pagar fatura ('+ativas.length+')</button>'
-            : '<button class="btn btn-secondary btn-sm" disabled style="justify-content:center;margin-top:4px">Fatura paga</button>')
+            : '<button class="btn btn-secondary btn-sm" disabled style="justify-content:center;margin-top:4px">Sem fatura neste mês</button>')
         + '</div>';
     });
     if(!db.cartoes.length) html += emptyState("Nenhum cartão cadastrado ainda.");
@@ -1202,17 +1220,20 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
       var par = parcelada(d);
       var falta = faltaDivida(d);
       var restante = restanteDivida(d);
-      var f = par ? Number(d.parcelaAtual||0)/Number(d.parcelas)*100 : 0;
-      var st = !ativaDivida(d) ? "success" : (par && f>=75 ? "warn" : "accent");
+      var pago = par ? Math.min(Number(d.parcelaAtual||0), Number(d.parcelas)) : 0;
+      var f = (par && Number(d.parcelas)>0) ? pago/Number(d.parcelas)*100 : 0;
+      var quitada = d.status==="Quitada" || (par && Number(d.parcelaAtual||0) >= Number(d.parcelas));
+      var futura = !quitada && mesesDesdeInicio(d) > 0;
+      var st = quitada ? "success" : (futura ? "" : (par && f>=75 ? "warn" : "accent"));
+      var prog = quitada ? '<span class="chip success">Quitada</span>'
+        : futura ? '<span class="chip">Começa '+mesLabelISO(d.inicio)+'</span>'
+        : (par ? '<div class="bar-top" style="margin-bottom:4px"><span class="chip '+st+'">'+falta+' restantes</span></div>'+bar(f, st==="accent"?"":st)
+               : '<span class="muted" style="font-size:12px">Ativa · sem parcelamento</span>');
       return '<tr>'
         +'<td><strong>'+esc(d.credor)+'</strong><br><span class="muted" style="font-size:12px">'+esc(d.tipo)+' · '+esc(d.categoria)+(d.inicio?(' · início '+mesLabelISO(d.inicio)):'')+(d.vencimento?(' · vence dia '+d.vencimento):'')+(Number(d.juros)?(' · '+NUM(d.juros)+'%/mês'):'')+'</span></td>'
         +'<td class="num">'+BRL(d.parcela)+'</td>'
-        +'<td class="num">'+(par ? (Number(d.parcelaAtual||0)+'/'+d.parcelas) : '—')+'</td>'
-        +'<td style="min-width:140px">'
-        +   (par
-              ? '<div class="bar-top" style="margin-bottom:4px"><span class="chip '+st+'">'+(ativaDivida(d)?(falta+" restantes"):"Quitada")+'</span></div>'+bar(f, st==="accent"?"":st)
-              : '<span class="muted" style="font-size:12px">Sem parcelamento definido</span>')
-        +'</td>'
+        +'<td class="num">'+(par ? (pago+'/'+d.parcelas) : '—')+'</td>'
+        +'<td style="min-width:140px">'+prog+'</td>'
         +'<td class="num">'+BRL(restante)+'</td>'
         +'<td>'+chip(d.status)+'</td>'
         +'<td><div class="acts" style="display:inline-flex;gap:6px;justify-content:flex-end">'
@@ -1289,7 +1310,7 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
 
   function renderRelatorios(c){
     var r = rendaTotal(), comp = parcelaMensal(), dv = dividaTotal();
-    var cartaoParc = db.parcelamentos.reduce(function(s,p){return s+(ativa(p)?Number(p.valorParcela):0);},0);
+    var cartaoParc = db.parcelamentos.reduce(function(s,p){return s+(devidaNoMes(p,0)?Number(p.valorParcela):0);},0);
     var dividaParc = db.dividas.reduce(function(s,d){return s+(d.status!=="Quitada"?Number(d.parcela):0);},0);
     var cols = projecao();
     var cats = db.categorias.map(function(x){return {nome:x.nome,comp:comprometidoCat(x.nome)};}).filter(function(x){return x.comp>0;}).sort(function(a,b){return b.comp-a.comp;});
@@ -1513,6 +1534,7 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
   var mesBaseSel = document.getElementById("mes-base");
   if(mesBaseSel){ mesBaseSel.addEventListener("change", function(){
     mesBase = this.value;
+    faturaMes = "";
     try{ localStorage.setItem("fluxo:mesBase", mesBase); }catch(e){}
     buildMesBase(); render();
     toast("Projetando a partir de "+labelFromISO(mesBase));
@@ -1531,6 +1553,8 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
     }
   });
   document.getElementById("content").addEventListener("change", function(e){
+    var fm = e.target.closest("[data-fatmes]");
+    if(fm){ faturaMes = fm.value; render(); return; }
     var el = e.target.closest("[data-mes]"); if(!el) return;
     if(el.dataset.mes === "from"){ mesFrom = Number(el.value); if(mesTo < mesFrom) mesTo = mesFrom; }
     else { mesTo = Number(el.value); if(mesFrom > mesTo) mesFrom = mesTo; }
