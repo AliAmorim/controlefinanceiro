@@ -449,6 +449,7 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
       <label class="field"><span>Senha</span><input id="login-pass" class="input" type="password" autocomplete="current-password" placeholder="sua senha" /></label>
       <p id="login-err" class="auth-err" hidden></p>
       <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center">Entrar</button>
+      <button type="button" class="btn btn-ghost" id="to-register" style="width:100%;justify-content:center;margin-top:8px">Criar conta</button>
     </form>
 
     <form id="setup-form" hidden>
@@ -459,6 +460,17 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
       <label class="field"><span>Confirmar senha</span><input id="setup-pass2" class="input" type="password" autocomplete="new-password" /></label>
       <p id="setup-err" class="auth-err" hidden></p>
       <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center">Criar usuário e entrar</button>
+    </form>
+
+    <form id="register-form" hidden>
+      <h2 style="font-size:var(--text-lg)">Criar conta</h2>
+      <p class="muted" style="font-size:13px;margin:8px 0 16px">Crie seu usuário e senha. Seus dados ficam separados dos outros.</p>
+      <label class="field"><span>Usuário</span><input id="register-user" class="input" type="text" autocomplete="username" placeholder="ex.: maria" /></label>
+      <label class="field"><span>Senha</span><input id="register-pass" class="input" type="password" autocomplete="new-password" placeholder="mínimo 6 caracteres" /></label>
+      <label class="field"><span>Confirmar senha</span><input id="register-pass2" class="input" type="password" autocomplete="new-password" /></label>
+      <p id="register-err" class="auth-err" hidden></p>
+      <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center">Criar conta e entrar</button>
+      <button type="button" class="btn btn-ghost" id="to-login" style="width:100%;justify-content:center;margin-top:8px">Já tenho conta</button>
     </form>
 
     <div id="preview-box" hidden style="margin-top:16px">
@@ -473,7 +485,7 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
   "use strict";
   var STORE = "fluxo:financas:v2";
   var API = "/api/state";
-  var AUTH = { login:"/api/login", logout:"/api/logout", me:"/api/me", setup:"/api/setup" };
+  var AUTH = { login:"/api/login", logout:"/api/logout", me:"/api/me", setup:"/api/setup", register:"/api/register" };
   var TOKEN = "";
   try{ TOKEN = localStorage.getItem("fluxo:token") || ""; }catch(e){}
   var serverMode = false;
@@ -611,8 +623,12 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
     box.hidden = false;
     document.getElementById("login-form").hidden = mode !== "login";
     document.getElementById("setup-form").hidden = mode !== "setup";
+    var rf = document.getElementById("register-form"); if(rf) rf.hidden = mode !== "register";
     var pb = document.getElementById("preview-box"); if(pb) pb.hidden = !apiUnavailable;
-    var f = mode === "setup" ? document.getElementById("setup-user") : document.getElementById("login-user");
+    var tr = document.getElementById("to-register"); if(tr) tr.hidden = apiUnavailable;
+    var f = mode === "setup" ? document.getElementById("setup-user")
+          : mode === "register" ? document.getElementById("register-user")
+          : document.getElementById("login-user");
     if(f) setTimeout(function(){ try{ f.focus(); }catch(e){} }, 30);
   }
   function hideAuth(){ var box = document.getElementById("auth"); if(box) box.hidden = true; }
@@ -1618,6 +1634,42 @@ dialog::backdrop{background:color-mix(in oklab,var(--fg),transparent 55%)}
             loadState();
           } else {
             err.textContent = (res.body && res.body.error) || "Não foi possível criar o usuário.";
+            err.hidden = false;
+          }
+        });
+    });
+  }
+
+  var toRegister = document.getElementById("to-register");
+  if(toRegister){ toRegister.addEventListener("click", function(){ showAuth("register"); }); }
+  var toLogin = document.getElementById("to-login");
+  if(toLogin){ toLogin.addEventListener("click", function(){ showAuth("login"); }); }
+  var registerForm = document.getElementById("register-form");
+  if(registerForm){
+    registerForm.addEventListener("submit", function(e){
+      e.preventDefault();
+      var u = document.getElementById("register-user").value.trim();
+      var p = document.getElementById("register-pass").value;
+      var p2 = document.getElementById("register-pass2").value;
+      var err = document.getElementById("register-err");
+      err.hidden = true;
+      if(u.length < 3){ err.textContent = "O usuário precisa ter ao menos 3 caracteres."; err.hidden = false; return; }
+      if(p.length < 6){ err.textContent = "A senha precisa ter ao menos 6 caracteres."; err.hidden = false; return; }
+      if(p !== p2){ err.textContent = "As senhas não conferem."; err.hidden = false; return; }
+      var btn = this.querySelector("button[type=submit]");
+      if(btn) btn.disabled = true;
+      fetch(AUTH.register, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ username:u, password:p }) })
+        .then(function(r){ return r.json().then(function(j){ return { ok:r.ok, body:j }; }); })
+        .catch(function(){ return { ok:false, body:{ error:"Falha de rede. Tente novamente." } }; })
+        .then(function(res){
+          if(btn) btn.disabled = false;
+          if(res.ok && res.body.token){
+            saveToken(res.body.token);
+            currentUser = res.body.user;
+            hideAuth();
+            loadState();
+          } else {
+            err.textContent = (res.body && res.body.error) || "Não foi possível criar a conta.";
             err.hidden = false;
           }
         });
